@@ -1,38 +1,50 @@
 import * as cdk from "@aws-cdk/core";
-import * as s3 from "@aws-cdk/aws-s3";
-import * as cloudfront from "@aws-cdk/aws-cloudfront";
-import * as origins from "@aws-cdk/aws-cloudfront-origins";
-import * as s3Deploy from "@aws-cdk/aws-s3-deployment";
+import * as lambda from "@aws-cdk/aws-lambda";
+import * as appsync from "@aws-cdk/aws-appsync";
 
 export class HelloWorldStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     // The code that defines your stack goes here
-    const websiteBucket = new s3.Bucket(this, "Website Bucket", {
-      versioned: true,
+    const api = new appsync.GraphqlApi(this, "GRAPHQL_API", {
+      name: "cdk-api",
+      schema: appsync.Schema.fromAsset("graphql/schema.gql"),
+      authorizationConfig: {
+        defaultAuthorization: {
+          authorizationType: appsync.AuthorizationType.API_KEY,
+        },
+      },
     });
 
-    const distribution = new cloudfront.Distribution(
-      this,
-      "Distribution Domain Name",
-      {
-        defaultBehavior: {
-          origin: new origins.S3Origin(websiteBucket),
-        },
-        defaultRootObject: "index.html",
-      }
+    new cdk.CfnOutput(this, "graphql-api", {
+      value: api.graphqlUrl,
+    });
+
+    new cdk.CfnOutput(this, "apiKey", {
+      value: api.apiKey || "",
+    });
+
+    const lambdaFunction = new lambda.Function(this, "GraphQlLambdaFunction", {
+      runtime: lambda.Runtime.NODEJS_12_X,
+      code: lambda.Code.fromAsset("lambda"),
+      handler: "index.handler",
+      timeout: cdk.Duration.seconds(10),
+    });
+
+    const lambdaDataSource = api.addLambdaDataSource(
+      "lambdaDataSource",
+      lambdaFunction
     );
 
-    new cdk.CfnOutput(this, "DomainName", {
-      value: distribution.domainName,
+    lambdaDataSource.createResolver({
+      typeName: "Query",
+      fieldName: "notes",
     });
 
-    new s3Deploy.BucketDeployment(this, "DeployWebsite", {
-      sources: [s3Deploy.Source.asset("./website")],
-      destinationBucket: websiteBucket,
-      distribution,
-      distributionPaths: ["/*"],
+       lambdaDataSource.createResolver({
+      typeName: "Query",
+      fieldName: "customNote",
     });
   }
 }
