@@ -1,6 +1,7 @@
 import * as cdk from "@aws-cdk/core";
 import * as lambda from "@aws-cdk/aws-lambda";
 import * as appsync from "@aws-cdk/aws-appsync";
+import * as ddb from "@aws-cdk/aws-dynamodb";
 
 export class HelloWorldStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
@@ -32,6 +33,16 @@ export class HelloWorldStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(10),
     });
 
+    const dynamoDbTable = new ddb.Table(this, "practiseTable", {
+      tableName: "PractiseTable",
+      partitionKey: {
+        name: "id",
+        type: ddb.AttributeType.STRING,
+      },
+    });
+    dynamoDbTable.grantFullAccess(lambdaFunction);
+    lambdaFunction.addEnvironment("TABLE_NAME", dynamoDbTable.tableName);
+
     const lambdaDataSource = api.addLambdaDataSource(
       "lambdaDataSource",
       lambdaFunction
@@ -39,12 +50,22 @@ export class HelloWorldStack extends cdk.Stack {
 
     lambdaDataSource.createResolver({
       typeName: "Query",
-      fieldName: "notes",
+      fieldName: "getTodos",
     });
 
-       lambdaDataSource.createResolver({
-      typeName: "Query",
-      fieldName: "customNote",
+    lambdaDataSource.createResolver({
+      typeName: "Mutation",
+      fieldName: "addTodo",
+    });
+
+    lambdaDataSource.createResolver({
+      typeName: "Mutation",
+      fieldName: "deleteTodo",
+    });
+
+    lambdaDataSource.createResolver({
+      typeName: "Mutation",
+      fieldName: "updateTodo",
     });
   }
 }
