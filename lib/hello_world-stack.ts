@@ -1,5 +1,4 @@
 import * as cdk from "@aws-cdk/core";
-import * as lambda from "@aws-cdk/aws-lambda";
 import * as appsync from "@aws-cdk/aws-appsync";
 import * as ddb from "@aws-cdk/aws-dynamodb";
 
@@ -26,13 +25,6 @@ export class HelloWorldStack extends cdk.Stack {
       value: api.apiKey || "",
     });
 
-    const lambdaFunction = new lambda.Function(this, "GraphQlLambdaFunction", {
-      runtime: lambda.Runtime.NODEJS_12_X,
-      code: lambda.Code.fromAsset("lambda"),
-      handler: "index.handler",
-      timeout: cdk.Duration.seconds(10),
-    });
-
     const dynamoDbTable = new ddb.Table(this, "practiseTable", {
       tableName: "PractiseTable",
       partitionKey: {
@@ -40,32 +32,47 @@ export class HelloWorldStack extends cdk.Stack {
         type: ddb.AttributeType.STRING,
       },
     });
-    dynamoDbTable.grantFullAccess(lambdaFunction);
-    lambdaFunction.addEnvironment("TABLE_NAME", dynamoDbTable.tableName);
 
-    const lambdaDataSource = api.addLambdaDataSource(
-      "lambdaDataSource",
-      lambdaFunction
+    const dynamodbDataSource = api.addDynamoDbDataSource(
+      "DynamoDbDataSource",
+      dynamoDbTable
     );
 
-    lambdaDataSource.createResolver({
+    dynamodbDataSource.createResolver({
       typeName: "Query",
       fieldName: "getTodos",
+      requestMappingTemplate: appsync.MappingTemplate.dynamoDbScanTable(),
+      responseMappingTemplate: appsync.MappingTemplate.dynamoDbResultList(),
     });
 
-    lambdaDataSource.createResolver({
+    dynamodbDataSource.createResolver({
       typeName: "Mutation",
       fieldName: "addTodo",
+      requestMappingTemplate: appsync.MappingTemplate.dynamoDbPutItem(
+        appsync.PrimaryKey.partition("id").auto(),
+        appsync.Values.projecting()
+      ),
+      responseMappingTemplate: appsync.MappingTemplate.dynamoDbResultItem(),
     });
 
-    lambdaDataSource.createResolver({
+    dynamodbDataSource.createResolver({
       typeName: "Mutation",
       fieldName: "deleteTodo",
+      requestMappingTemplate: appsync.MappingTemplate.dynamoDbDeleteItem(
+        "id",
+        "id"
+      ),
+      responseMappingTemplate: appsync.MappingTemplate.dynamoDbResultItem(),
     });
 
-    lambdaDataSource.createResolver({
+    dynamodbDataSource.createResolver({
       typeName: "Mutation",
       fieldName: "updateTodo",
+      requestMappingTemplate: appsync.MappingTemplate.dynamoDbPutItem(
+        appsync.PrimaryKey.partition("id").is("id"),
+        appsync.Values.projecting()
+      ),
+      responseMappingTemplate: appsync.MappingTemplate.dynamoDbResultItem(),
     });
   }
 }
